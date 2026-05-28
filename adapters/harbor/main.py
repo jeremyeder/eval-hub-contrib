@@ -72,6 +72,13 @@ ALLOWED_IMAGE_PREFIXES = tuple(filter(None, os.environ.get(
 ALLOWED_SECRET_PREFIXES = tuple(filter(None, os.environ.get(
     "HARBOR_ALLOWED_SECRET_PREFIXES", "").split(","))) or None
 
+_EVALHUB_MODE = os.environ.get("EVALHUB_MODE", "")
+if _EVALHUB_MODE == "k8s" and not ALLOWED_IMAGE_PREFIXES:
+    raise RuntimeError(
+        "HARBOR_ALLOWED_IMAGE_PREFIXES must be set in k8s mode. "
+        "Example: HARBOR_ALLOWED_IMAGE_PREFIXES=quay.io/evalhub/,quay.io/rhai/"
+    )
+
 MAX_STDOUT_BYTES = 10_000
 
 
