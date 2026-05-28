@@ -147,7 +147,7 @@ def parse_job(job_dir: Path) -> dict:
 
         if status == "errored":
             n_errored += 1
-            trials.append({"task_name": raw_trial["task_name"], "metrics": []})
+            trials.append({"task_name": raw_trial.get("task_name", "unknown"), "metrics": []})
             continue
 
         reward = raw_trial.get("reward")
@@ -440,7 +440,7 @@ def _build_job_results(
         m.metric_value for t in trials for m in t["metrics"]
         if m.metric_name == "cost_usd" and m.metric_value is not None
     )
-    if total_cost:
+    if total_cost is not None:
         all_metrics.append(EvaluationResult(
             metric_name="total_cost_usd", metric_value=total_cost, metric_type="cost"))
 
@@ -450,7 +450,7 @@ def _build_job_results(
         benchmark_index=config.benchmark_index,
         model_name=model_name or agent_name,
         results=all_metrics,
-        overall_score=job_data["mean_reward"],
+        overall_score=job_data["mean_reward"] if job_data["mean_reward"] is not None else 0.0,
         num_examples_evaluated=len(trials),
         duration_seconds=duration_s,
         completed_at=datetime.now(timezone.utc),
@@ -499,7 +499,7 @@ class HarborAdapter(FrameworkAdapter):
         )
         jobs_dir = self._jobs_dir or params.get("jobs_dir")
         execution_mode = (
-            self._execution_mode or params.get("execution_mode", "harbor")
+            self._execution_mode or params.get("execution_mode", "kubernetes")
         )
 
         if jobs_dir:
@@ -604,7 +604,7 @@ class HarborAdapter(FrameworkAdapter):
                 "could exfiltrate mounted secrets. Use oracle mode for "
                 "tasks that need secrets, or remove secret mounts.")
 
-        task_name = task_path.replace("/", "-").replace("tasks-", "")
+        task_name = task_path.rstrip("/").rsplit("/", 1)[-1]
 
         self._report_status(callbacks, JobStatus.RUNNING,
                             JobPhase.RUNNING_EVALUATION,
@@ -705,7 +705,6 @@ class HarborAdapter(FrameworkAdapter):
 # ---------------------------------------------------------------------------
 
 def main():
-    import os
     import sys
     import traceback
 

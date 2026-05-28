@@ -292,7 +292,7 @@ class TestHarborAdapterCli:
         spec = _make_spec(id="test-job-001", parameters={"agent": "oracle"})
         callbacks = create_autospec(JobCallbacks)
 
-        adapter = HarborAdapter(task_path="/tasks/test")
+        adapter = HarborAdapter(task_path="/tasks/test", execution_mode="harbor")
         results = adapter.run_benchmark_job(spec, callbacks)
 
         assert results.overall_score == 1.0
@@ -311,7 +311,7 @@ class TestHarborAdapterCli:
         spec = _make_spec(id="job-fail")
         callbacks = create_autospec(JobCallbacks)
 
-        adapter = HarborAdapter(task_path="/tasks/missing")
+        adapter = HarborAdapter(task_path="/tasks/missing", execution_mode="harbor")
         results = adapter.run_benchmark_job(spec, callbacks)
 
         assert results.overall_score == 0.0
