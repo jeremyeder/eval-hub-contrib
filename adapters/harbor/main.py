@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shlex
 import subprocess
 import tempfile
@@ -57,6 +58,55 @@ except ImportError:
     ApiException = Exception  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Security constraints
+# ---------------------------------------------------------------------------
+
+ALLOWED_NAMESPACES = frozenset(os.environ.get(
+    "HARBOR_ALLOWED_NAMESPACES", "evalhub").split(","))
+
+ALLOWED_IMAGE_PREFIXES = tuple(filter(None, os.environ.get(
+    "HARBOR_ALLOWED_IMAGE_PREFIXES", "").split(","))) or None
+
+ALLOWED_SECRET_PREFIXES = tuple(filter(None, os.environ.get(
+    "HARBOR_ALLOWED_SECRET_PREFIXES", "").split(","))) or None
+
+MAX_STDOUT_BYTES = 10_000
+
+
+def _validate_namespace(namespace: str) -> None:
+    if namespace not in ALLOWED_NAMESPACES:
+        raise ValueError(
+            f"Namespace {namespace!r} not in allowed list: "
+            f"{sorted(ALLOWED_NAMESPACES)}")
+
+
+def _validate_image(image: str) -> None:
+    if ALLOWED_IMAGE_PREFIXES and not image.startswith(ALLOWED_IMAGE_PREFIXES):
+        raise ValueError(
+            f"Image {image!r} does not match any allowed prefix: "
+            f"{ALLOWED_IMAGE_PREFIXES}")
+
+
+def _validate_secret_names(names: list[str], context: str) -> None:
+    if not ALLOWED_SECRET_PREFIXES:
+        return
+    for name in names:
+        if not name.startswith(ALLOWED_SECRET_PREFIXES):
+            raise ValueError(
+                f"{context} secret {name!r} does not match any allowed "
+                f"prefix: {ALLOWED_SECRET_PREFIXES}")
+
+
+def _scrub_stdout(raw: str) -> str:
+    """Extract only HARBOR_REWARD line from stdout, discard everything else."""
+    lines = []
+    for line in raw.splitlines():
+        if line.startswith("HARBOR_REWARD="):
+            lines.append(line)
+    return "\n".join(lines)[:MAX_STDOUT_BYTES]
+
 
 # ---------------------------------------------------------------------------
 # Results parser
@@ -238,6 +288,11 @@ def run_task_job(
 
     volumes, volume_mounts = _build_volumes(secret_volumes)
 
+    if run_as_user < 1:
+        raise ValueError(
+            f"run_as_user must be >= 1 (got {run_as_user}). "
+            "Running as root (UID 0) is not allowed.")
+
     job = k8s_client.V1Job(
         metadata=k8s_client.V1ObjectMeta(name=job_name, namespace=namespace),
         spec=k8s_client.V1JobSpec(
@@ -246,8 +301,12 @@ def run_task_job(
             template=k8s_client.V1PodTemplateSpec(
                 spec=k8s_client.V1PodSpec(
                     restart_policy="Never",
+                    automount_service_account_token=False,
+                    enable_service_links=False,
                     security_context=k8s_client.V1PodSecurityContext(
-                        run_as_user=run_as_user),
+                        run_as_user=run_as_user,
+                        run_as_non_root=True,
+                    ),
                     volumes=volumes,
                     containers=[k8s_client.V1Container(
                         name="task",
@@ -257,6 +316,11 @@ def run_task_job(
                         resources=k8s_client.V1ResourceRequirements(
                             requests={"cpu": cpu, "memory": memory},
                             limits={"cpu": cpu, "memory": memory},
+                        ),
+                        security_context=k8s_client.V1SecurityContext(
+                            allow_privilege_escalation=False,
+                            capabilities=k8s_client.V1Capabilities(
+                                drop=["ALL"]),
                         ),
                         env_from=[
                             *[k8s_client.V1EnvFromSource(
@@ -486,10 +550,10 @@ class HarborAdapter(FrameworkAdapter):
 
         if result.returncode != 0:
             logger.error("harbor run failed (exit %d): %s",
-                         result.returncode, result.stderr)
+                         result.returncode, result.stderr[:500])
             self._report_status(callbacks, JobStatus.FAILED,
                                 JobPhase.RUNNING_EVALUATION,
-                                f"harbor run failed: {result.stderr[:200]}")
+                                f"harbor run failed with exit code {result.returncode}")
             return JobResults(
                 id=config.id, benchmark_id=config.benchmark_id,
                 benchmark_index=config.benchmark_index,
@@ -500,7 +564,7 @@ class HarborAdapter(FrameworkAdapter):
                 overall_score=0.0, num_examples_evaluated=0,
                 duration_seconds=time.monotonic() - start_time,
                 completed_at=datetime.now(timezone.utc),
-                evaluation_metadata={"stderr": result.stderr[:1000]},
+                evaluation_metadata={"exit_code": result.returncode},
             )
 
         job_dir = Path(jobs_dir) / job_name
@@ -514,7 +578,7 @@ class HarborAdapter(FrameworkAdapter):
         timeout = int(params.get("timeout_sec", 600))
         cpu = params.get("cpu", "2")
         memory = params.get("memory", "4Gi")
-        run_as_user = int(params.get("run_as_user", 1001))
+        run_as_user = 1001  # hardcoded — do not accept from params
         env_from_secrets = params.get("env_from_secrets", [])
         if isinstance(env_from_secrets, str):
             env_from_secrets = [env_from_secrets]
@@ -525,6 +589,20 @@ class HarborAdapter(FrameworkAdapter):
 
         if not task_image:
             raise ValueError("task_image is required for kubernetes execution mode")
+
+        _validate_namespace(namespace)
+        _validate_image(task_image)
+        _validate_secret_names(env_from_secrets, "env_from_secrets")
+        _validate_secret_names(
+            [sv["secret_name"] for sv in secret_volumes if isinstance(sv, dict)],
+            "secret_volumes")
+
+        if agent_name in ("claude-code", "agent") and (env_from_secrets or secret_volumes):
+            raise ValueError(
+                "Agent mode cannot be combined with secret mounts — "
+                "the agent runs with --dangerously-skip-permissions and "
+                "could exfiltrate mounted secrets. Use oracle mode for "
+                "tasks that need secrets, or remove secret mounts.")
 
         task_name = task_path.replace("/", "-").replace("tasks-", "")
 
@@ -567,7 +645,7 @@ class HarborAdapter(FrameworkAdapter):
                 "agent": agent_name, "task_path": task_path,
                 "task_image": task_image, "execution_mode": "kubernetes",
                 "exit_code": result["exit_code"],
-                "test_output": result["stdout"][-50000:] if result.get("stdout") else "",
+                "test_output": _scrub_stdout(result.get("stdout", "")),
             },
         )
 

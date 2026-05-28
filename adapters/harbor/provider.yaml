@@ -92,6 +92,11 @@ parameters:
     default: 4Gi
     description: Memory request/limit for task pods
 
+  - name: run_as_user
+    type: integer
+    default: 1001
+    description: "DEPRECATED: ignored. Hardcoded to 1001 for security."
+
   - name: env_from_secrets
     type: array
     default: []

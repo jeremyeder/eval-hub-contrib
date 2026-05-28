@@ -346,6 +346,49 @@ class TestHarborAdapterK8s:
         assert results.overall_score == 1.0
 
 
+class TestSecurityConstraints:
+    def test_run_as_user_zero_rejected(self):
+        from main import run_task_job
+
+        with pytest.raises(ValueError, match="run_as_user must be >= 1"):
+            with patch("main._load_k8s_config"):
+                with patch("main.k8s_client") as mock_client:
+                    for attr in ("V1Job", "V1ObjectMeta", "V1JobSpec",
+                                 "V1PodTemplateSpec", "V1PodSpec",
+                                 "V1PodSecurityContext", "V1Container",
+                                 "V1ResourceRequirements", "V1SecurityContext",
+                                 "V1Capabilities", "BatchV1Api", "CoreV1Api"):
+                        setattr(mock_client, attr, MagicMock())
+                    run_task_job(
+                        task_name="t", task_image="i", namespace="evalhub",
+                        agent="oracle", run_as_user=0,
+                    )
+
+    @patch("main._framework_adapter_init")
+    @patch("main.run_task_job")
+    def test_agent_mode_blocks_secret_mounts(self, mock_run_task, mock_init):
+        from main import HarborAdapter
+
+        spec = _make_spec(parameters={
+            "execution_mode": "kubernetes",
+            "task_image": "registry/task:latest",
+            "task_path": "tasks/test",
+            "agent": "claude-code",
+            "env_from_secrets": ["api-keys"],
+        })
+        callbacks = create_autospec(JobCallbacks)
+
+        adapter = HarborAdapter(execution_mode="kubernetes")
+        with pytest.raises(ValueError, match="Agent mode cannot be combined with secret"):
+            adapter.run_benchmark_job(spec, callbacks)
+
+    def test_scrub_stdout_strips_non_reward_lines(self):
+        from main import _scrub_stdout
+
+        raw = "SECRET_KEY=abc123\nHARBOR_REWARD=1.0\nsome debug output\n"
+        assert _scrub_stdout(raw) == "HARBOR_REWARD=1.0"
+
+
 class TestStatusCallbacks:
     @patch("main._framework_adapter_init")
     def test_lifecycle_phases(self, mock_init, tmp_path):
