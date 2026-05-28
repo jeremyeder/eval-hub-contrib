@@ -168,7 +168,7 @@ def parse_job(job_dir: Path) -> dict:
                     metric_type=_METRIC_TYPES.get(key, "float"),
                 ))
 
-        trials.append({"task_name": raw_trial["task_name"], "metrics": metrics})
+        trials.append({"task_name": raw_trial.get("task_name", "unknown"), "metrics": metrics})
 
     mean_reward = (
         sum(completed_rewards) / len(completed_rewards)
@@ -742,13 +742,15 @@ def main():
         logger.error("run_benchmark_job returned None")
         sys.exit(1)
 
-    try:
-        rid = callbacks.mlflow.save(results, spec)
-        if rid:
-            results.mlflow_run_id = rid
-            logger.info("MLflow run: %s", rid)
-    except Exception as exc:
-        logger.warning("MLflow save failed (non-fatal): %s", exc)
+    mlflow_ops = getattr(callbacks, "mlflow", None)
+    if mlflow_ops and callable(getattr(mlflow_ops, "save", None)):
+        try:
+            rid = mlflow_ops.save(results, spec)
+            if rid:
+                results.mlflow_run_id = rid
+                logger.info("MLflow run: %s", rid)
+        except Exception as exc:
+            logger.warning("MLflow save failed (non-fatal): %s", exc)
 
     callbacks.report_results(results)
     logger.info("Completed: %d examples, overall_score=%s",
