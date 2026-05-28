@@ -6,7 +6,7 @@ Runs [Harbor](https://github.com/harbor-ai/harbor) benchmark tasks on Kubernetes
 
 ## Architecture
 
-```
+```text
 JobSpec → HarborAdapter
               ├── harbor CLI mode: `harbor run -p <task> -a <agent>`
               ├── kubernetes mode: K8s Job with task image
