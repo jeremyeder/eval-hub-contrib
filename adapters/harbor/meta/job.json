@@ -1,0 +1,25 @@
+{
+  "id": "harbor-oracle-example-001",
+  "provider_id": "harbor",
+  "benchmark_id": "harbor-task",
+  "benchmark_index": 0,
+  "model": {
+    "url": "local://oracle",
+    "name": "oracle"
+  },
+  "parameters": {
+    "task_path": "/tasks/harbor-maas-v1",
+    "task_image": "quay.io/rhai/harbor-task:latest",
+    "execution_mode": "kubernetes",
+    "agent": "oracle",
+    "namespace": "evalhub",
+    "timeout_sec": 600,
+    "cpu": "2",
+    "memory": "4Gi"
+  },
+  "callback_url": "http://localhost:8080",
+  "tags": [
+    {"key": "framework", "value": "harbor"},
+    {"key": "evaluation_type", "value": "agentic_coding"}
+  ]
+}

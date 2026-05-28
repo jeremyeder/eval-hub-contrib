@@ -1,0 +1,7 @@
+# Harbor adapter requirements for eval-hub
+
+# EvalHub SDK (framework adapter support)
+eval-hub-sdk[adapter]==0.1.7
+
+# Kubernetes client (for K8s Job execution mode)
+kubernetes>=29.0,<32.0

@@ -10,6 +10,7 @@ VERSION ?= latest
 IMAGE_LIGHTEVAL = $(REGISTRY)/community-lighteval:$(VERSION)
 IMAGE_GUIDELLM = $(REGISTRY)/community-guidellm:$(VERSION)
 IMAGE_MTEB = $(REGISTRY)/community-mteb:$(VERSION)
+IMAGE_HARBOR = $(REGISTRY)/community-harbor:$(VERSION)
 
 # Default target
 .PHONY: help
@@ -21,18 +22,21 @@ help:
 	@echo "  make image-lighteval    - Build LightEval adapter image"
 	@echo "  make image-guidellm     - Build GuideLLM adapter image"
 	@echo "  make image-mteb         - Build MTEB adapter image"
+	@echo "  make image-harbor       - Build Harbor adapter image"
 	@echo "  make images             - Build all adapter images"
 	@echo ""
 	@echo "Image Push:"
 	@echo "  make push-lighteval     - Push LightEval adapter image"
 	@echo "  make push-guidellm      - Push GuideLLM adapter image"
 	@echo "  make push-mteb          - Push MTEB adapter image"
+	@echo "  make push-harbor        - Push Harbor adapter image"
 	@echo "  make push-images        - Push all adapter images"
 	@echo ""
 	@echo "Clean:"
 	@echo "  make clean-lighteval    - Remove LightEval adapter image"
 	@echo "  make clean-guidellm     - Remove GuideLLM adapter image"
 	@echo "  make clean-mteb         - Remove MTEB adapter image"
+	@echo "  make clean-harbor       - Remove Harbor adapter image"
 	@echo "  make clean-images       - Remove all adapter images"
 	@echo ""
 	@echo "Test:"
@@ -40,6 +44,7 @@ help:
 	@echo "  make test-lighteval    - Run LightEval adapter tests"
 	@echo "  make test-mteb         - Run MTEB adapter tests"
 	@echo "  make test-clear        - Run CLEAR adapter tests"
+	@echo "  make test-harbor       - Run Harbor adapter tests"
 	@echo "  make tests             - Run all adapter tests"
 	@echo ""
 	@echo "Variables:"
@@ -72,8 +77,15 @@ image-mteb:
 	$(BUILD_TOOL) build -t $(IMAGE_MTEB) -f Containerfile .
 	@echo "✅ Built: $(IMAGE_MTEB)"
 
+.PHONY: image-harbor
+image-harbor:
+	@echo "Building Harbor adapter image..."
+	cd adapters/harbor && \
+	$(BUILD_TOOL) build -t $(IMAGE_HARBOR) -f Containerfile .
+	@echo "✅ Built: $(IMAGE_HARBOR)"
+
 .PHONY: images
-images: image-lighteval image-guidellm image-mteb
+images: image-lighteval image-guidellm image-mteb image-harbor
 	@echo "✅ All adapter images built"
 
 # Push targets
@@ -95,8 +107,14 @@ push-mteb:
 	$(BUILD_TOOL) push $(IMAGE_MTEB)
 	@echo "✅ Pushed: $(IMAGE_MTEB)"
 
+.PHONY: push-harbor
+push-harbor:
+	@echo "Pushing Harbor adapter image..."
+	$(BUILD_TOOL) push $(IMAGE_HARBOR)
+	@echo "✅ Pushed: $(IMAGE_HARBOR)"
+
 .PHONY: push-images
-push-images: push-lighteval push-guidellm push-mteb
+push-images: push-lighteval push-guidellm push-mteb push-harbor
 	@echo "✅ All adapter images pushed"
 
 # Clean targets
@@ -118,8 +136,14 @@ clean-mteb:
 	$(BUILD_TOOL) rmi $(IMAGE_MTEB) 2>/dev/null || true
 	@echo "✅ Removed: $(IMAGE_MTEB)"
 
+.PHONY: clean-harbor
+clean-harbor:
+	@echo "Removing Harbor adapter image..."
+	$(BUILD_TOOL) rmi $(IMAGE_HARBOR) 2>/dev/null || true
+	@echo "✅ Removed: $(IMAGE_HARBOR)"
+
 .PHONY: clean-images
-clean-images: clean-lighteval clean-guidellm clean-mteb
+clean-images: clean-lighteval clean-guidellm clean-mteb clean-harbor
 	@echo "✅ All adapter images removed"
 
 # Development targets
@@ -134,6 +158,10 @@ build-and-push-guidellm: image-guidellm push-guidellm
 .PHONY: build-and-push-mteb
 build-and-push-mteb: image-mteb push-mteb
 	@echo "✅ MTEB adapter built and pushed"
+
+.PHONY: build-and-push-harbor
+build-and-push-harbor: image-harbor push-harbor
+	@echo "✅ Harbor adapter built and pushed"
 
 .PHONY: build-and-push-all
 build-and-push-all: images push-images
@@ -176,6 +204,15 @@ test-clear:
 	PATH="$$(pwd)/.venv/bin:$$PATH" .venv/bin/pytest tests/ -v
 	@echo "✅ CLEAR tests passed"
 
+.PHONY: test-harbor
+test-harbor:
+	@echo "Running Harbor adapter tests..."
+	cd adapters/harbor && \
+	test -d .venv || python3 -m venv .venv && \
+	.venv/bin/pip install --quiet -r requirements.txt -r requirements-test.txt && \
+	PATH="$$(pwd)/.venv/bin:$$PATH" .venv/bin/pytest tests/ -v
+	@echo "✅ Harbor tests passed"
+
 .PHONY: tests
-tests: test-guidellm test-lighteval test-mteb test-clear
+tests: test-guidellm test-lighteval test-mteb test-clear test-harbor
 	@echo "✅ All adapter tests passed"

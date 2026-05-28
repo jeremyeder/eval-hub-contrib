@@ -1,0 +1,110 @@
+# Harbor Benchmark Provider Configuration
+# Agentic coding benchmark evaluation via Harbor task datasets
+
+id: harbor
+name: Harbor
+description: >-
+  Agentic coding benchmark evaluation using Harbor task datasets.
+  Runs tasks as Kubernetes Jobs with oracle verification or AI agent
+  execution. Measures reward (pass/fail), execution time, token usage,
+  and cost across configurable task datasets.
+type: builtin
+
+runtime:
+  k8s:
+    image: quay.io/evalhub/community-harbor:latest
+    entrypoint:
+      - python
+      - main.py
+    cpu_request: 100m
+    memory_request: 128Mi
+    cpu_limit: 1000m
+    memory_limit: 2Gi
+  local:
+    # Reserved for local runtime configuration
+
+benchmarks:
+  - id: harbor-task
+    name: Harbor Task Benchmark
+    description: >-
+      Run Harbor benchmark tasks with two-stage verification.
+      Each task contains an instruction, test suite, and oracle solution.
+      The agent (or oracle) implements the solution and the verifier
+      runs the test suite to determine the reward (0 or 1).
+    category: agent_evaluation
+    metrics:
+      - reward
+      - mean_reward
+      - duration_seconds
+      - cost_usd
+      - num_trials
+      - num_errored
+    tags:
+      - agent
+      - coding
+      - benchmark
+      - harbor
+      - software-engineering
+
+parameters:
+  - name: task_path
+    type: string
+    required: true
+    description: Path to Harbor task or dataset directory
+
+  - name: task_image
+    type: string
+    required: true
+    description: Pre-built task container image (registry/repo:tag)
+
+  - name: execution_mode
+    type: string
+    default: kubernetes
+    description: "Execution mode: kubernetes (K8s Jobs) or harbor (local Docker CLI)"
+
+  - name: agent
+    type: string
+    default: oracle
+    description: "Agent to run: oracle (apply patches), claude-code (AI agent), or agent"
+
+  - name: model
+    type: string
+    default: null
+    description: Model identifier for AI agent mode (e.g. claude-sonnet-4-6)
+
+  - name: namespace
+    type: string
+    default: evalhub
+    description: Kubernetes namespace for Job execution
+
+  - name: timeout_sec
+    type: integer
+    default: 600
+    description: Task timeout in seconds
+
+  - name: cpu
+    type: string
+    default: "2"
+    description: CPU request/limit for task pods
+
+  - name: memory
+    type: string
+    default: 4Gi
+    description: Memory request/limit for task pods
+
+  - name: env_from_secrets
+    type: array
+    default: []
+    description: Kubernetes Secret names to inject as environment variables
+
+  - name: env_from_configmaps
+    type: array
+    default: []
+    description: Kubernetes ConfigMap names to inject as environment variables
+
+  - name: secret_volumes
+    type: array
+    default: []
+    description: >-
+      Secret volume mounts. Each entry: {secret_name, mount_path, items?}.
+      Used for API keys, certificates, or credentials.

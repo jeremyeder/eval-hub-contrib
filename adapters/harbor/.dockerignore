@@ -1,0 +1,11 @@
+# Exclude from container builds
+
+meta/
+tests/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+README.md
+.DS_Store
+.git/

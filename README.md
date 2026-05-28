@@ -14,6 +14,7 @@ This repository contains adapters that integrate various evaluation frameworks w
 | [GuideLLM](https://github.com/vllm-project/guidellm) | `quay.io/evalhub/community-guidellm:latest` | ✗ | ✓ | Performance benchmarking platform for LLM inference servers |
 | [MTEB](https://github.com/embeddings-benchmark/mteb) | `quay.io/evalhub/community-mteb:latest` | ✗ | ✓ | Massive Text Embedding Benchmark for embedding models |
 | [IBM CLEAR](https://github.com/IBM/CLEAR) | `quay.io/evalhub/community-ibm-clear:latest` | ✓ | ✓ | Agentic trace analysis (LLM-as-judge error reporting) |
+| [Harbor](https://github.com/harbor-ai/harbor) | `quay.io/evalhub/community-harbor:latest` | ✗ | ✓ | Agentic coding benchmark with oracle verification |
 
 ## Building Adapters
 
